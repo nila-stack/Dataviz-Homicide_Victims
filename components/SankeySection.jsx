@@ -22,34 +22,28 @@ const C2X = 582, C2W = 214  // Col 2 — MOTIVES / TRIGGERS
 const BOX_H = 62
 const BOX_GAP = 11
 
-// Gaps between stacked bars within a column.
-// GAP1 was 4px — far too tight for the short "Older Women" segment's
-// rotated label, which is what caused it to collide with the
-// "Sexual Context" label beneath it. Widened to 18px.
 const GAP0 = 7
 const GAP1 = 18
 
 // ── Bar Y-positions (proportional) ───────────────────────────────────────────
-const KNOWN_H    = Math.round(0.76 * CH)          // 388
-const KNOWN_Y    = Y0                             //  22   end=410
-const STRANGER_H = CH - KNOWN_H                   // 122  (true complement, not an independently-rounded %)
-const STRANGER_Y = KNOWN_Y + KNOWN_H + GAP0        // 417  end=539
+const KNOWN_H    = Math.round(0.76 * CH)
+const KNOWN_Y    = Y0
+const STRANGER_H = CH - KNOWN_H
+const STRANGER_Y = KNOWN_Y + KNOWN_H + GAP0
 
-const IP_H = Math.round(0.60 * CH)                // 306
-const IP_Y = Y0                                   //  22   end=328
-const OW_H = Math.round(0.10 * CH)                //  51
-const OW_Y = IP_Y + IP_H + GAP1                   // 346  end=397
-const SC_H = CH - IP_H - OW_H                     // 153  (true complement)
-const SC_Y = OW_Y + OW_H + GAP1                   // 415  end=568
+const IP_H = Math.round(0.60 * CH)
+const IP_Y = Y0
+const OW_H = Math.round(0.10 * CH)
+const OW_Y = IP_Y + IP_H + GAP1
+const SC_H = CH - IP_H - OW_H
+const SC_Y = OW_Y + OW_H + GAP1
 
 // ── Right column boxes (7 equal, centered against col 1's actual span) ───────
-const BOX_STEP  = BOX_H + BOX_GAP                                    // 73
-const COL1_SPAN = (SC_Y + SC_H) - IP_Y                                // 546
-const BOX_Y0    = IP_Y + Math.floor((COL1_SPAN - (7 * BOX_H + 6 * BOX_GAP)) / 2)  // 45
+const BOX_STEP  = BOX_H + BOX_GAP
+const COL1_SPAN = (SC_Y + SC_H) - IP_Y
+const BOX_Y0    = IP_Y + Math.floor((COL1_SPAN - (7 * BOX_H + 6 * BOX_GAP)) / 2)
 const bY = (i) => BOX_Y0 + i * BOX_STEP
 
-// Actual bottom-most content across all three columns — headings/legend/viewBox
-// are derived from this instead of a hardcoded Y0+CH, so they never clip.
 const CONTENT_BOTTOM = Math.max(
   STRANGER_Y + STRANGER_H,
   SC_Y + SC_H,
@@ -57,7 +51,7 @@ const CONTENT_BOTTOM = Math.max(
 )
 const HEADING_Y = CONTENT_BOTTOM + 26
 const LEGEND_Y  = CONTENT_BOTTOM + 56
-const VH        = LEGEND_Y + 32   // viewBox height with margin below the legend
+const VH        = LEGEND_Y + 32
 
 const BOXES = [
   { label: 'Upset about separation',   color: C_GOLD,   type: 'Intentional'   },
@@ -76,9 +70,9 @@ function fp(x0, y0, h0, x1, y1, h1) {
 }
 
 // ── Col 0 → Col 1 flows ───────────────────────────────────────────────────────
-const KN_TO_IP = IP_H                           // 306 (all of IP from Known)
-const KN_TO_OW = OW_H                           // 51
-const KN_TO_SC = KNOWN_H - KN_TO_IP - KN_TO_OW  // 31 (remainder)
+const KN_TO_IP = IP_H
+const KN_TO_OW = OW_H
+const KN_TO_SC = KNOWN_H - KN_TO_IP - KN_TO_OW
 
 const F01 = [
   { d: fp(C0X+C0W, KNOWN_Y,                   KN_TO_IP,  C1X, IP_Y,            IP_H),       c: `${C_KNOWN}77`    },
@@ -88,20 +82,63 @@ const F01 = [
 ]
 
 // ── Col 1 → Col 2 flows ───────────────────────────────────────────────────────
-const IP_SL = Math.floor(IP_H / 5)      // per box (5 boxes from IP)
-const RBF_OW = OW_H                     // OW fills top of Robbery box
-const RBF_SC = BOX_H - RBF_OW           // SC fills rest of Robbery box
-const UNK_SC = SC_H - RBF_SC            // SC funnel to Unknown
+// NOTE: reconstructed from pixel-analysis of the reference design — most boxes
+// draw from TWO victim-type sources, not one. In particular "Sexual Assault"
+// draws mainly from Sexual Context (not just Intimate Partner), which is what
+// produces the long diagonal ribbon crossing over the teal flows. If you have
+// the real underlying percentages, swap the split values below for exact ones.
+
+const ipUpset      = Math.round(IP_H * 0.21)
+const ipObsession  = Math.round(IP_H * 0.19)
+const ipPossessive = Math.round(IP_H * 0.20)
+const ipJealous    = Math.round(IP_H * 0.20)
+const ipSexAssault = IP_H - ipUpset - ipObsession - ipPossessive - ipJealous
+
+const owObsession = Math.round(OW_H * 0.30)
+const owRobbery    = OW_H - owObsession
+
+const scSexAssault = Math.round(SC_H * 0.42)
+const scRobbery     = Math.round(SC_H * 0.12)
+const scUnknown     = SC_H - scSexAssault - scRobbery
+
+// Walk down each bar, allocating consecutive slices in this order
+let _y = IP_Y
+const ipSlice = {}
+;[['upset', ipUpset], ['obsession', ipObsession], ['possessive', ipPossessive],
+  ['jealous', ipJealous], ['sexAssault', ipSexAssault]].forEach(([k, h]) => { ipSlice[k] = [_y, h]; _y += h })
+
+_y = OW_Y
+const owSlice = {}
+;[['obsession', owObsession], ['robbery', owRobbery]].forEach(([k, h]) => { owSlice[k] = [_y, h]; _y += h })
+
+_y = SC_Y
+const scSlice = {}
+;[['robbery', scRobbery], ['sexAssault', scSexAssault], ['unknown', scUnknown]].forEach(([k, h]) => { scSlice[k] = [_y, h]; _y += h })
+
+// Stack multiple incoming ribbons within the same target box, top to bottom, in call order
+const _targetFill = [0, 0, 0, 0, 0, 0, 0]
+function destY(boxIndex, h) {
+  const y = bY(boxIndex) + _targetFill[boxIndex]
+  _targetFill[boxIndex] += h
+  return y
+}
+function link(srcYH, boxIndex, color) {
+  const [sy, sh] = srcYH
+  const ty = destY(boxIndex, sh)
+  return { d: fp(C1X + C1W, sy, sh, C2X, ty, sh), c: color }
+}
 
 const F12 = [
-  { d: fp(C1X+C1W, IP_Y+0*IP_SL,  IP_SL,          C2X, bY(0), BOX_H),         c: `${C_GOLD}AA`   },
-  { d: fp(C1X+C1W, IP_Y+1*IP_SL,  IP_SL,          C2X, bY(1), BOX_H),         c: `${C_GOLD}AA`   },
-  { d: fp(C1X+C1W, IP_Y+2*IP_SL,  IP_SL,          C2X, bY(2), BOX_H),         c: `${C_TEAL}AA`   },
-  { d: fp(C1X+C1W, IP_Y+3*IP_SL,  IP_SL,          C2X, bY(3), BOX_H),         c: `${C_TEAL}AA`   },
-  { d: fp(C1X+C1W, IP_Y+4*IP_SL,  IP_H-4*IP_SL,   C2X, bY(4), BOX_H),         c: `${C_GOLD}AA`   },
-  { d: fp(C1X+C1W, OW_Y,           RBF_OW,         C2X, bY(5),         RBF_OW), c: `${C_PINK}AA`   },
-  { d: fp(C1X+C1W, SC_Y,           RBF_SC,         C2X, bY(5)+RBF_OW,  RBF_SC), c: `${C_PINK}88`   },
-  { d: fp(C1X+C1W, SC_Y+RBF_SC,    UNK_SC,         C2X, bY(6),         BOX_H),  c: `${C_PURPLE}AA` },
+  link(ipSlice.upset,      0, `${C_GOLD}AA`),
+  link(ipSlice.obsession,  1, `${C_GOLD}AA`),
+  link(owSlice.obsession,  1, `${C_GOLD}88`),
+  link(ipSlice.possessive, 2, `${C_TEAL}AA`),
+  link(ipSlice.jealous,    3, `${C_TEAL}AA`),
+  link(ipSlice.sexAssault, 4, `${C_GOLD}AA`),
+  link(scSlice.sexAssault, 4, `${C_GOLD}88`),
+  link(owSlice.robbery,    5, `${C_PINK}AA`),
+  link(scSlice.robbery,    5, `${C_PINK}88`),
+  link(scSlice.unknown,    6, `${C_PURPLE}AA`),
 ]
 
 const LEGEND = [
@@ -130,7 +167,7 @@ export default function SankeySection() {
   const inView = useInView(ref, { once: true, margin: '-80px' })
 
   return (
-    <section style={{ padding: '72px 24px 80px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+    <section style={{ padding: '72px 24px 80px', borderTop: '1px solid rgba(255,255,255,0.08)', background: '#0B0B0C' }}>
       <div className="max-w-5xl mx-auto">
 
         <motion.h2
@@ -163,6 +200,7 @@ export default function SankeySection() {
             style={{ width: '100%', minWidth: '640px', maxWidth: `${VW}px`, display: 'block' }}
             aria-label="Sankey diagram: femicide familiarity, victim types, and motives"
           >
+            <rect x={0} y={0} width={VW} height={VH} fill="#0B0B0C" />
 
             {/* Col 0 → Col 1 flows */}
             {F01.map((f, i) => (
@@ -208,7 +246,7 @@ export default function SankeySection() {
               animate={inView ? { height: SC_H, y: SC_Y } : {}}
               transition={{ duration: 0.55, delay: 0.2 }} />
 
-            {/* Col 1 vertical labels — OW uses a smaller font now that it has room to breathe */}
+            {/* Col 1 vertical labels */}
             <VLabel x={C1X - 16} y={IP_Y + IP_H / 2} text="Intimate Partner" sz={13} />
             <VLabel x={C1X - 33} y={IP_Y + IP_H / 2} text="60 %"              sz={12} w="700" />
             <VLabel x={C1X - 16} y={OW_Y + OW_H / 2} text="Older Women"       sz={10} />
