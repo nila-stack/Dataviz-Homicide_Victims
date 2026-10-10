@@ -3,9 +3,14 @@ import QuestionnaireSection from '@/components/QuestionnaireSection'
 import SilhouetteSection    from '@/components/SilhouetteSection'
 import RelationshipSection  from '@/components/RelationshipSection'
 import WaffleSection        from '@/components/WaffleSection'
+import CauseCards           from '@/components/CauseCards'
 import BarGraphSection      from '@/components/BarGraphSection'
-import SankeySection        from '@/components/SankeySection'
+import FemicideSection      from '@/components/FemicideSection'
+import JusticeSection       from '@/components/JusticeSection'
+import IndiaSection         from '@/components/IndiaSection'
+import LiveCounter          from '@/components/LiveCounter'
 import ResearchSnippets     from '@/components/ResearchSnippets'
+import SourcesSection       from '@/components/SourcesSection'
 import MarqueeFooter        from '@/components/MarqueeFooter'
 
 export default function HomePage() {
@@ -16,9 +21,14 @@ export default function HomePage() {
       <SilhouetteSection />
       <RelationshipSection />
       <WaffleSection />
+      <CauseCards />
       <BarGraphSection />
-      <SankeySection />
+      <FemicideSection />
+      <JusticeSection />
+      <IndiaSection />
+      <LiveCounter />
       <ResearchSnippets />
+      <SourcesSection />
       <MarqueeFooter />
     </main>
   )

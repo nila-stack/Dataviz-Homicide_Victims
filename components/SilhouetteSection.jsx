@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef } from 'react'
-import { motion, useScroll, useTransform, useMotionValue, useMotionValueEvent } from 'framer-motion'
+import { motion, useScroll, useTransform } from 'framer-motion'
 import { MALE_COUNT, TOTAL_SILHOUETTES } from '@/lib/data'
 
 // ── Exact Figma silhouette paths (viewBox: 0 0 53 141.237) ───────────────────
@@ -21,13 +21,14 @@ function PersonFigure({ fill }) {
 }
 
 // ── Single cell: color is driven by a "max-only" progress value ───────────────
-function SilhouetteCell({ index, maxProgress }) {
+function SilhouetteCell({ index, progress }) {
   const NEUTRAL    = '#4A4842'   // neutral gray on dark bg
   const finalColor = index < MALE_COUNT ? '#7ABFFF' : '#FFB0F4'
   const threshold  = index / TOTAL_SILHOUETTES
 
-  const fill = useTransform(maxProgress, (p) =>
-    p >= threshold ? finalColor : NEUTRAL
+  // Strictly greater, so at the very top every figure is grey (the default state)
+  const fill = useTransform(progress, (p) =>
+    p > threshold ? finalColor : NEUTRAL
   )
 
   return (
@@ -41,21 +42,16 @@ function SilhouetteCell({ index, maxProgress }) {
 export default function SilhouetteSection() {
   const sectionRef = useRef(null)
 
-  // Raw scroll progress for this section
+  // Scroll progress for this section — two-way: figures fill in as you scroll down and
+  // return to grey (and the stat fades out) as you scroll back up
   const { scrollYProgress } = useScroll({
     target: sectionRef,
     offset: ['start 0.8', 'end 0.65'],
   })
 
-  // Clamp: only increase, never decrease (once behavior)
-  const maxProgress = useMotionValue(0)
-  useMotionValueEvent(scrollYProgress, 'change', (latest) => {
-    if (latest > maxProgress.get()) maxProgress.set(latest)
-  })
-
   // Reveal text once grid is almost done
-  const textOpacity = useTransform(maxProgress, [0.82, 1], [0, 1])
-  const textY       = useTransform(maxProgress, [0.82, 1], [18, 0])
+  const textOpacity = useTransform(scrollYProgress, [0.82, 1], [0, 1])
+  const textY       = useTransform(scrollYProgress, [0.82, 1], [18, 0])
 
   return (
     <section
@@ -77,7 +73,7 @@ export default function SilhouetteSection() {
               color: '#EFECE4',
               fontSize: 'clamp(0.95rem, 1.8vw, 1.05rem)',
               lineHeight: 1.75,
-              maxWidth: '720px',
+              maxWidth: '920px', // two lines on desktop
             }}
           >
             A single homicide tells one story. But when hundreds of cases are viewed together,
@@ -91,7 +87,7 @@ export default function SilhouetteSection() {
             style={{ display: 'grid', gap: '6px 4px', maxWidth: '900px' }}
           >
             {Array.from({ length: TOTAL_SILHOUETTES }).map((_, i) => (
-              <SilhouetteCell key={i} index={i} maxProgress={maxProgress} />
+              <SilhouetteCell key={i} index={i} progress={scrollYProgress} />
             ))}
           </div>
 

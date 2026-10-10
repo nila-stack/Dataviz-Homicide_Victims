@@ -24,12 +24,21 @@ html {
   scroll-behavior: smooth;
 }
 
+/* One seamless gradient over the full page height (Figma: #181818 at 58% → #000000 at 100%).
+   Sections stay transparent so nothing interrupts it. */
 body {
-  background: linear-gradient(to bottom, #181818, #000000);
-  background-attachment: fixed;
+  background: linear-gradient(to bottom, #181818 58%, #000000 100%);
   color: #EFECE4;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
+}
+
+/* Horizontal card rail — scrolls with trackpad/touch swipes, no visible scrollbar */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
 
 ::selection {

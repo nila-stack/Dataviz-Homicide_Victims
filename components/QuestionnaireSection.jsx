@@ -10,6 +10,14 @@ const CARD_WIDTH = 460 // px on screen
 // Button layout per Figma nodes 211:5133 (Q1) and 211:5229 (Q2)
 // Positions as % of card (849×457 space)
 function getButtonStyles(q) {
+  // Both answers long (e.g. "About 1 in 5" / "About 1 in 20"): two equal wide buttons,
+  // so the ✓ / ✕ marks have room
+  if (q.options.every((o) => o.length > 8)) {
+    return [
+      { top: '60.39%', left: '16.37%', width: '36%', height: '14.23%' },
+      { top: '60.39%', left: '56%',    width: '36%', height: '14.23%' },
+    ]
+  }
   const hasLongOption = q.options.some((o) => o.length > 8)
   if (hasLongOption) {
     // Q2-style: asymmetric — short button left, long button right
@@ -25,9 +33,19 @@ function getButtonStyles(q) {
   ]
 }
 
+const GOLD = '#FFBE2A'
+const WRONG_RED = '#B01A1B'
+
 function QuestionCard({ q }) {
-  const [picked, setPicked] = useState(null)
+  const [wrong, setWrong] = useState([])      // indices of wrong answers tried so far
+  const [solved, setSolved] = useState(false) // the right answer has been picked
   const btnStyles = getButtonStyles(q)
+
+  const pick = (oi) => {
+    if (solved) return
+    if (oi === q.correct) setSolved(true)
+    else if (!wrong.includes(oi)) setWrong([...wrong, oi])
+  }
 
   return (
     <motion.div
@@ -53,32 +71,50 @@ function QuestionCard({ q }) {
           }}
         />
 
-        {/* Ruled notebook lines */}
+        {/* Paper markings, masked to the torn paper's shape so nothing pokes past its edges.
+            This box sits exactly over the paper; inner positions are % of the paper. */}
         <div
+          aria-hidden="true"
           style={{
             position: 'absolute',
-            top: '14%',
-            left: '8%',
-            right: '8%',
-            bottom: '12%',
-            backgroundImage:
-              'repeating-linear-gradient(transparent, transparent 20px, rgba(0,0,190,0.09) 20px, rgba(0,0,190,0.09) 21px)',
+            top: '9.8%',
+            left: '3.06%',
+            width: '93.88%',
+            height: '81.84%',
             pointerEvents: 'none',
+            maskImage: 'url(/assets/card-paper.svg)',
+            maskSize: '100% 100%',
+            maskRepeat: 'no-repeat',
+            WebkitMaskImage: 'url(/assets/card-paper.svg)',
+            WebkitMaskSize: '100% 100%',
+            WebkitMaskRepeat: 'no-repeat',
           }}
-        />
+        >
+          {/* Ruled notebook lines (card 14% → 88% tall, 8% side margins) */}
+          <div
+            style={{
+              position: 'absolute',
+              top: '5.13%',
+              left: '5.26%',
+              right: '5.26%',
+              bottom: '4.45%',
+              backgroundImage:
+                'repeating-linear-gradient(transparent, transparent 20px, rgba(0,0,190,0.09) 20px, rgba(0,0,190,0.09) 21px)',
+            }}
+          />
 
-        {/* Red margin line — matches Figma left margin */}
-        <div
-          style={{
-            position: 'absolute',
-            top: '12%',
-            bottom: '12%',
-            left: '14.96%',
-            width: '1.5px',
-            background: 'rgba(176,26,27,0.45)',
-            pointerEvents: 'none',
-          }}
-        />
+          {/* Red margin line — Figma left margin (14.96% of card), runs edge to edge of the paper */}
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              bottom: 0,
+              left: '12.68%',
+              width: '1.5px',
+              background: 'rgba(176,26,27,0.45)',
+            }}
+          />
+        </div>
 
         {/* Question text — exact Figma position: top 29.76%, left 14.96% */}
         <p
@@ -98,38 +134,51 @@ function QuestionCard({ q }) {
         </p>
 
         {/* Answer buttons — absolute positioned at exact Figma insets */}
-        {q.options.map((opt, oi) => (
-          <button
-            key={oi}
-            onClick={() => setPicked(oi)}
-            style={{
-              position: 'absolute',
-              ...btnStyles[oi],
-              background: picked === oi ? '#d4a020' : '#FFBE2A',
-              color: '#1a1a1a',
-              fontWeight: 800,
-              fontSize: 'clamp(0.8rem, 1.5vw, 0.95rem)',
-              border: 'none',
-              borderRadius: '10px',
-              cursor: 'pointer',
-              outline: picked === oi && oi === q.correct ? '2.5px solid #B01A1B' : 'none',
-              outlineOffset: '2px',
-              transition: 'background 0.15s',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              whiteSpace: 'nowrap',
-              padding: '0 8px',
-            }}
-          >
-            {opt}
-          </button>
-        ))}
+        {/* Wrong picks turn red and stay red; the right pick gets a tick and reveals the data */}
+        {q.options.map((opt, oi) => {
+          const isWrong = wrong.includes(oi)
+          const isRight = solved && oi === q.correct
+          return (
+            <motion.button
+              key={oi}
+              onClick={() => pick(oi)}
+              aria-pressed={isWrong || isRight}
+              aria-label={isWrong ? `${opt}, wrong answer` : isRight ? `${opt}, right answer` : opt}
+              animate={isWrong ? { x: [0, -6, 6, -4, 4, 0] } : { x: 0 }}
+              transition={{ duration: 0.35 }}
+              style={{
+                position: 'absolute',
+                ...btnStyles[oi],
+                background: isWrong ? WRONG_RED : GOLD,
+                color: isWrong ? '#EFECE4' : '#1a1a1a',
+                fontWeight: 800,
+                fontSize: 'clamp(0.8rem, 1.5vw, 0.95rem)',
+                border: 'none',
+                borderRadius: '10px',
+                cursor: solved ? 'default' : 'pointer',
+                outline: isRight ? '2.5px solid #1a1a1a' : 'none',
+                outlineOffset: '2px',
+                opacity: solved && !isRight && !isWrong ? 0.55 : 1,
+                transition: 'background 0.15s, color 0.15s, opacity 0.2s',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
+                whiteSpace: 'nowrap',
+                padding: '0 8px',
+              }}
+            >
+              {isWrong && <span aria-hidden="true">✕</span>}
+              {isRight && <span aria-hidden="true">✓</span>}
+              {opt}
+            </motion.button>
+          )
+        })}
       </div>
 
-      {/* Answer reveal — OUTSIDE the aspect-ratio box so it never clips */}
+      {/* Answer reveal — only for the right answer; OUTSIDE the aspect-ratio box so it never clips */}
       <AnimatePresence>
-        {picked !== null && (
+        {solved && (
           <motion.div
             initial={{ opacity: 0, y: -6 }}
             animate={{ opacity: 1, y: 0 }}
@@ -145,7 +194,7 @@ function QuestionCard({ q }) {
               style={{
                 margin: 0,
                 fontSize: '0.72rem',
-                color: picked === q.correct ? '#FFBE2A' : 'rgba(239,236,228,0.75)',
+                color: GOLD,
                 fontWeight: 700,
                 letterSpacing: '0.07em',
                 textTransform: 'uppercase',
@@ -161,15 +210,41 @@ function QuestionCard({ q }) {
 }
 
 export default function QuestionnaireSection() {
-  const constraintRef = useRef(null)
+  const railRef = useRef(null)
+  const dragRef = useRef(null)
   const CARD_GAP = 24
-  const totalDrag = (questions.length - 1) * (CARD_WIDTH + CARD_GAP)
+
+  // Trackpad and touch swipes scroll the rail natively. A mouse can also click-drag it;
+  // a drag longer than a few px swallows the click so it doesn't press a button.
+  const onPointerDown = (e) => {
+    if (e.pointerType !== 'mouse' || e.button !== 0) return
+    dragRef.current = { x: e.clientX, left: railRef.current.scrollLeft, moved: false }
+  }
+  const onPointerMove = (e) => {
+    const d = dragRef.current
+    if (!d) return
+    const dx = e.clientX - d.x
+    if (Math.abs(dx) > 4) d.moved = true
+    if (d.moved) railRef.current.scrollLeft = d.left - dx
+  }
+  const endDrag = () => {
+    const d = dragRef.current
+    dragRef.current = null
+    if (d?.moved) {
+      // let the click that follows this pointerup know it was a drag
+      railRef.current.dataset.dragged = '1'
+      setTimeout(() => { if (railRef.current) delete railRef.current.dataset.dragged }, 0)
+    }
+  }
+  const onClickCapture = (e) => {
+    if (railRef.current?.dataset.dragged) {
+      e.preventDefault()
+      e.stopPropagation()
+    }
+  }
 
   return (
-    <section
-      className="relative py-16 px-6"
-      style={{ background: 'rgba(0,0,0,0.3)' }}
-    >
+    <section className="relative px-6" style={{ paddingTop: 129, paddingBottom: 39 }} /* +25 / −25: segment moves down 25px, the next section stays put */>
       <div className="max-w-5xl mx-auto">
         {/* Intro text from Figma */}
         <motion.p
@@ -198,10 +273,10 @@ export default function QuestionnaireSection() {
             fontWeight: 400,
             fontSize: 'clamp(0.9rem, 1.4vw, 1.1rem)',
             lineHeight: 1.6,
-            marginBottom: '32px',
+            marginBottom: '82px', // 32 + 30 + 20: moves the swipe hint and cards down
           }}
         >
-          Answer these four quick questions based on your first instinct. Don&apos;t overthink it, just trust your gut.
+          Answer these six quick questions based on your first instinct. Don&apos;t overthink it, just trust your gut.
         </motion.p>
 
         {/* Swipe hint */}
@@ -212,35 +287,25 @@ export default function QuestionnaireSection() {
           ← swipe to see all questions →
         </p>
 
-        {/* Draggable container */}
-        <div ref={constraintRef} style={{ overflow: 'hidden', cursor: 'grab' }}>
-          <motion.div
-            className="flex pb-4"
-            style={{ gap: `${CARD_GAP}px`, cursor: 'grab', width: 'max-content' }}
-            drag="x"
-            dragConstraints={{ left: -totalDrag, right: 0 }}
-            dragElastic={0.05}
-            whileDrag={{ cursor: 'grabbing' }}
-          >
+        {/* Horizontally scrolling rail — two-finger trackpad swipe, touch swipe or mouse drag */}
+        <div
+          ref={railRef}
+          className="no-scrollbar"
+          role="region"
+          aria-label="Questions"
+          tabIndex={0}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={endDrag}
+          onPointerLeave={endDrag}
+          onClickCapture={onClickCapture}
+          style={{ overflowX: 'auto', overflowY: 'hidden', overscrollBehaviorX: 'contain', cursor: 'grab' }}
+        >
+          <div className="flex pb-4" style={{ gap: `${CARD_GAP}px`, width: 'max-content' }}>
             {questions.map((q) => (
               <QuestionCard key={q.id} q={q} />
             ))}
-          </motion.div>
-        </div>
-
-        {/* Dot indicators */}
-        <div className="flex justify-center gap-2 mt-6">
-          {questions.map((_, i) => (
-            <div
-              key={i}
-              style={{
-                width: '8px',
-                height: '8px',
-                borderRadius: '50%',
-                background: i === 0 ? '#FFBE2A' : 'rgba(255,255,255,0.25)',
-              }}
-            />
-          ))}
+          </div>
         </div>
       </div>
     </section>

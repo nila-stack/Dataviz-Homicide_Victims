@@ -1,9 +1,42 @@
 'use client'
 
-import { motion } from 'framer-motion'
+import { useEffect, useRef, useState } from 'react'
+import { motion, animate, useInView, useMotionValue, useTransform } from 'framer-motion'
 import { barData } from '@/lib/data'
 
+// Percentage that counts up from 0 in step with its bar growing
+function CountUp({ value, delay }) {
+  const ref = useRef(null)
+  const inView = useInView(ref, { once: true, margin: '-100px' })
+  const count = useMotionValue(0)
+  const rounded = useTransform(count, (v) => Math.round(v))
+  useEffect(() => {
+    if (!inView) return
+    const controls = animate(count, value, { duration: 1.1, ease: 'easeOut', delay })
+    return () => controls.stop()
+  }, [inView, count, value, delay])
+  return (
+    <span ref={ref}>
+      <motion.span>{rounded}</motion.span> %
+    </span>
+  )
+}
+
+// 76 → "3 in 4", 52 → "1 in 2": the simplest fraction (denominator ≤ 10) close to the value
+function inEvery(pct) {
+  let best = null
+  for (let d = 2; d <= 10; d++) {
+    const n = Math.round((pct / 100) * d)
+    const err = Math.abs(n / d - pct / 100)
+    if (n > 0 && (!best || err < best.err - 0.005)) best = { n, d, err }
+  }
+  return `${best.n} in ${best.d}`
+}
+
 export default function BarGraphSection() {
+  // Hovering (or focusing) a bar dims the other one and spells its value out in words
+  const [hovered, setHovered] = useState(null)
+
   return (
     <section className="py-20 px-6" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
       <div className="max-w-2xl mx-auto">
@@ -32,7 +65,21 @@ export default function BarGraphSection() {
         {/* Bars */}
         <div className="flex flex-col gap-5">
           {barData.map((d, i) => (
-            <div key={d.label}>
+            <div
+              key={d.label}
+              tabIndex={0}
+              aria-label={`${d.label}: ${d.value}%, about ${inEvery(d.value)} ${d.label.toLowerCase()} knew their killer`}
+              onMouseEnter={() => setHovered(d.label)}
+              onMouseLeave={() => setHovered(null)}
+              onFocus={() => setHovered(d.label)}
+              onBlur={() => setHovered(null)}
+              style={{
+                opacity: hovered && hovered !== d.label ? 0.35 : 1,
+                transition: 'opacity 0.25s',
+                outline: 'none',
+                cursor: 'default',
+              }}
+            >
               <div className="flex items-center gap-4 mb-2">
                 <span
                   style={{
@@ -66,8 +113,30 @@ export default function BarGraphSection() {
                       height: '100%',
                       background: d.color,
                       borderRadius: '3px',
+                      filter: hovered === d.label ? 'brightness(1.12)' : 'none',
+                      transition: 'filter 0.25s',
                     }}
                   />
+
+                  {/* Value in words, revealed on hover */}
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      position: 'absolute',
+                      left: '12px',
+                      top: '50%',
+                      transform: `translateY(-50%) translateX(${hovered === d.label ? 0 : -6}px)`,
+                      opacity: hovered === d.label ? 1 : 0,
+                      transition: 'opacity 0.25s, transform 0.25s',
+                      color: '#1a1a1a',
+                      fontSize: '0.8125rem',
+                      fontWeight: 700,
+                      whiteSpace: 'nowrap',
+                      pointerEvents: 'none',
+                    }}
+                  >
+                    ≈ {inEvery(d.value)} {d.label.toLowerCase()}
+                  </span>
                 </div>
 
                 {/* Percentage */}
@@ -75,7 +144,7 @@ export default function BarGraphSection() {
                   initial={{ opacity: 0 }}
                   whileInView={{ opacity: 1 }}
                   viewport={{ once: true, margin: '-100px' }}
-                  transition={{ duration: 0.4, delay: 0.9 + i * 0.15 }}
+                  transition={{ duration: 0.3, delay: i * 0.15 }}
                   style={{
                     color: '#EFECE4',
                     fontWeight: 700,
@@ -84,7 +153,7 @@ export default function BarGraphSection() {
                     flexShrink: 0,
                   }}
                 >
-                  {d.value} %
+                  <CountUp value={d.value} delay={i * 0.15} />
                 </motion.span>
               </div>
             </div>

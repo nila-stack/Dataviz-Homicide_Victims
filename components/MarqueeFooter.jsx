@@ -7,7 +7,8 @@ export default function MarqueeFooter() {
   const strip = TAPE_TEXT.repeat(REPEAT)
 
   return (
-    <footer style={{ marginTop: '48px', overflow: 'hidden' }}>
+    // 64px bottom padding = 50px clear below the tilted bottom tape's lowest corner (it dips ~14px)
+    <footer style={{ marginTop: '33px', paddingBottom: '64px', overflow: 'hidden' }}> {/* 48 − 15 */}
       <style>{`
         @keyframes marquee-left {
           from { transform: translateX(0); }

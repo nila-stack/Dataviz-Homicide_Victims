@@ -1,7 +1,19 @@
 'use client'
 
+import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { isotypeData } from '@/lib/data'
+
+const MALE = '#7ABFFF'
+const FEMALE = '#FFB0F4'
+const GENDERS = [
+  { key: 'male', color: MALE, label: 'Male victims', noun: ['man', 'men'] },
+  { key: 'female', color: FEMALE, label: 'Female victims', noun: ['woman', 'women'] },
+]
+const nounFor = (key, n) => {
+  const g = GENDERS.find((x) => x.key === key)
+  return `${n} ${n === 1 ? g.noun[0] : g.noun[1]}`
+}
 
 // ── Exact Figma silhouette paths ──────────────────────────────────────────────
 function PersonFigure({ color }) {
@@ -17,18 +29,50 @@ function PersonFigure({ color }) {
   )
 }
 
+// Rows slide in, then their figures pop in one by one like a tally being counted.
+// Replays: rows retract when scrolled away and return on the way back.
+const rowVariants = {
+  hidden: { opacity: 0, x: -16 },
+  shown: (i) => ({
+    opacity: 1,
+    x: 0,
+    transition: { duration: 0.45, delay: i * 0.08, delayChildren: i * 0.08 + 0.1, staggerChildren: 0.018 },
+  }),
+}
+const iconVariants = {
+  hidden: { opacity: 0, y: 8, scale: 0.7 },
+  shown: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring', stiffness: 500, damping: 22 } },
+}
+
 // ── One relationship row ──────────────────────────────────────────────────────
 // Icons flow left-to-right: blue first, then pink — wrapped naturally into rows.
-function IsotypeRow({ category, male, female, index }) {
-  const total  = male + female
-  const icons  = Array.from({ length: total }, (_, i) => i < male ? '#7ABFFF' : '#FFB0F4')
+// `gender` highlights one gender (from the legend); `activeRow` focuses one row (hover).
+function IsotypeRow({ category, male, female, index, gender, activeRow, setActiveRow }) {
+  const total = male + female
+  const icons = Array.from({ length: total }, (_, i) => (i < male ? 'male' : 'female'))
+  const isActive = activeRow === category
+  const dimRow = activeRow !== null && !isActive
+
+  // End-of-row readout: the highlighted gender's count, or the full split while hovered
+  const summary = gender
+    ? nounFor(gender, gender === 'male' ? male : female)
+    : isActive
+      ? `${nounFor('male', male)} · ${nounFor('female', female)}`
+      : ''
 
   return (
     <motion.div
-      initial={{ opacity: 0, x: -16 }}
-      whileInView={{ opacity: 1, x: 0 }}
-      viewport={{ once: true, margin: '-50px' }}
-      transition={{ duration: 0.45, delay: index * 0.08 }}
+      custom={index}
+      variants={rowVariants}
+      initial="hidden"
+      whileInView="shown"
+      viewport={{ once: false, margin: '-50px' }}
+      tabIndex={0}
+      aria-label={`${category}: ${nounFor('male', male)} and ${nounFor('female', female)}`}
+      onMouseEnter={() => setActiveRow(category)}
+      onMouseLeave={() => setActiveRow(null)}
+      onFocus={() => setActiveRow(category)}
+      onBlur={() => setActiveRow(null)}
       style={{
         display: 'grid',
         gridTemplateColumns: '180px 1fr',
@@ -36,32 +80,79 @@ function IsotypeRow({ category, male, female, index }) {
         gap: '16px',
         padding: '18px 0',
         borderTop: '1px dashed rgba(255,255,255,0.12)',
+        outline: 'none',
       }}
     >
-      {/* Category label */}
+      {/* Category label, with the readout underneath (space is always reserved, so nothing shifts) */}
+      <div>
       <p
         style={{
-          color: 'rgba(239,236,228,0.75)',
-          fontWeight: 500,
+          color: isActive ? '#EFECE4' : 'rgba(239,236,228,0.75)',
+          fontWeight: isActive ? 600 : 500,
           fontSize: '0.9rem',
           lineHeight: 1.4,
+          opacity: dimRow ? 0.4 : 1,
+          transition: 'opacity 0.2s, color 0.2s',
         }}
       >
         {category}
       </p>
+      <span
+        aria-hidden="true"
+        style={{
+          display: 'block',
+          minHeight: '1.2em',
+          marginTop: '2px',
+          fontSize: '0.75rem',
+          fontWeight: 700,
+          whiteSpace: 'nowrap',
+          color: gender ? (gender === 'male' ? MALE : FEMALE) : 'rgba(239,236,228,0.85)',
+          opacity: summary && !dimRow ? 1 : 0,
+          transform: summary ? 'none' : 'translateY(-3px)',
+          transition: 'opacity 0.2s, transform 0.2s',
+        }}
+      >
+        {summary}
+      </span>
+      </div>
 
       {/* Icon flow */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px 2px', alignContent: 'flex-start' }}>
-        {icons.map((color, i) => (
-          <PersonFigure key={i} color={color} />
+      <div
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: '3px 2px',
+          alignContent: 'flex-start',
+          opacity: dimRow ? 0.3 : 1,
+          transition: 'opacity 0.2s',
+        }}
+      >
+        {icons.map((g, i) => (
+          <motion.span key={i} variants={iconVariants} style={{ display: 'block' }}>
+            <span
+              style={{
+                display: 'block',
+                opacity: gender && gender !== g ? 0.15 : 1,
+                transition: 'opacity 0.25s',
+              }}
+            >
+              <PersonFigure color={g === 'male' ? MALE : FEMALE} />
+            </span>
+          </motion.span>
         ))}
       </div>
+
     </motion.div>
   )
 }
 
 // ── Section ───────────────────────────────────────────────────────────────────
 export default function RelationshipSection() {
+  const [locked, setLocked] = useState(null)   // gender chosen by clicking the legend
+  const [preview, setPreview] = useState(null) // gender previewed by hovering the legend
+  const [activeRow, setActiveRow] = useState(null)
+  const gender = preview ?? locked
+
   return (
     <section
       style={{ padding: '72px 24px 80px', borderTop: '1px solid rgba(255,255,255,0.08)' }}
@@ -93,7 +184,7 @@ export default function RelationshipSection() {
           transition={{ duration: 0.45, delay: 0.1 }}
           style={{
             color: '#EFECE4',
-            fontSize: '0.9375rem',
+            fontSize: 'clamp(0.95rem, 1.8vw, 1.05rem)', // same as the silhouette intro
             lineHeight: 1.7,
             maxWidth: '640px',
             marginBottom: '8px',
@@ -103,25 +194,69 @@ export default function RelationshipSection() {
           For many victims, the offender was someone they already knew.
         </motion.p>
 
-        {/* Legend */}
-        <div className="flex gap-6 mb-2 mt-4">
-          {[
-            { color: '#7ABFFF', label: 'Male victims'   },
-            { color: '#FFB0F4', label: 'Female victims'  },
-          ].map(l => (
-            <div key={l.label} className="flex items-center gap-2">
-              <PersonFigure color={l.color} />
-              <span style={{ fontSize: '0.8125rem', color: 'rgba(239,236,228,0.65)' }}>{l.label}</span>
-            </div>
-          ))}
+        {/* Legend — doubles as a filter: hover to preview, click to keep one gender highlighted */}
+        <div className="flex flex-wrap items-center gap-4 mb-2 mt-14">
+          {GENDERS.map((l) => {
+            const on = locked === l.key
+            return (
+              <button
+                key={l.key}
+                type="button"
+                aria-pressed={on}
+                onMouseEnter={() => setPreview(l.key)}
+                onMouseLeave={() => setPreview(null)}
+                onFocus={() => setPreview(l.key)}
+                onBlur={() => setPreview(null)}
+                onClick={() => setLocked(on ? null : l.key)}
+                className="flex items-center gap-2"
+                style={{
+                  background: on ? 'rgba(255,255,255,0.06)' : 'transparent',
+                  border: `1px solid ${on ? l.color : 'transparent'}`,
+                  borderRadius: '999px',
+                  padding: '4px 12px 4px 8px',
+                  marginLeft: '-8px',
+                  cursor: 'pointer',
+                  opacity: gender && gender !== l.key ? 0.4 : 1,
+                  transition: 'opacity 0.2s, border-color 0.2s, background 0.2s',
+                }}
+              >
+                <PersonFigure color={l.color} />
+                <span style={{ fontSize: '0.8125rem', color: on ? '#EFECE4' : 'rgba(239,236,228,0.65)' }}>
+                  {l.label}
+                </span>
+              </button>
+            )
+          })}
         </div>
 
         {/* Rows */}
         <div>
           {isotypeData.map((row, i) => (
-            <IsotypeRow key={row.category} {...row} index={i} />
+            <IsotypeRow
+              key={row.category}
+              {...row}
+              index={i}
+              gender={gender}
+              activeRow={activeRow}
+              setActiveRow={setActiveRow}
+            />
           ))}
         </div>
+
+        {/* Hint for the legend filter, under the chart */}
+        <p
+          style={{
+            marginTop: '14px',
+            paddingTop: '14px',
+            borderTop: '1px dashed rgba(255,255,255,0.12)',
+            fontSize: '0.75rem',
+            color: 'rgba(239,236,228,0.4)',
+          }}
+        >
+          {locked
+            ? 'Click the highlighted legend again to show everyone'
+            : 'Hover or click “Male victims” / “Female victims” above to compare'}
+        </p>
       </div>
     </section>
   )
