@@ -91,8 +91,8 @@ function Marker({ x, y, n, progress }) {
 
 export default function MarqueeFooter() {
   const ref = useRef(null)
-  // 0 when the section's top is 90% down the screen, 1 when its bottom reaches the bottom of the screen
-  const { scrollYProgress: progress } = useScroll({ target: ref, offset: ['start 0.9', 'end end'] })
+  // 0 when the section's top is 75% down the screen, 1 when its end (after the pinned stretch) reaches the bottom
+  const { scrollYProgress: progress } = useScroll({ target: ref, offset: ['start 0.75', 'end end'] })
   const chalk = useTransform(progress, [0, CHALK_END], [0, 1])
   const bloodOpacity = useTransform(progress, BLOOD_RANGE, [0, 0.95])
   const bloodScale = useTransform(progress, BLOOD_RANGE, [0.4, 1])
@@ -112,112 +112,117 @@ export default function MarqueeFooter() {
   }
 
   return (
-    <section ref={ref} style={{ marginTop: '33px', paddingBottom: '56px', paddingLeft: '16px', paddingRight: '16px' }}>
-      {/* Torch switch, on the right edge of the content column */}
-      <div className="max-w-4xl mx-auto flex justify-end" style={{ marginBottom: '8px' }}>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={torch}
-          onClick={() => { setTorch((t) => !t); setLight(null) }}
-          className="flex items-center"
-          style={{ gap: '10px', background: 'none', border: 'none', padding: '4px 0', cursor: 'pointer',
-            color: 'rgba(239,236,228,0.75)', fontSize: '0.8125rem', fontFamily: 'var(--font-dm-mono), monospace' }}
-        >
-          Torch
-          <span aria-hidden="true" style={{ position: 'relative', width: '38px', height: '22px', borderRadius: '999px',
-            background: torch ? MARKER : 'rgba(239,236,228,0.18)', transition: 'background 0.2s' }}>
-            <motion.span
-              initial={false}
-              animate={{ x: torch ? 16 : 0 }}
-              transition={{ type: 'spring', stiffness: 600, damping: 32 }}
-              style={{ position: 'absolute', top: '3px', left: '3px', width: '16px', height: '16px', borderRadius: '50%',
-                background: torch ? '#141414' : '#EFECE4' }}
-            />
-          </span>
-          <span style={{ minWidth: '1.8em', textAlign: 'left' }}>{torch ? 'On' : 'Off'}</span>
-        </button>
-      </div>
-
-      <svg
-        ref={svgRef}
-        onPointerDown={moveLight}
-        onPointerMove={moveLight}
-        onPointerLeave={() => setLight(null)}
-        viewBox="0 20 410 360"
-        role="img"
-        aria-label="A chalk outline of a body on the ground, with blood by the head and five evidence markers"
-        // 351px tall: 40px shorter than the first version of this drawing
-        // In torch mode a finger drags the light instead of scrolling the page
-        style={{ display: 'block', width: '100%', maxWidth: '400px', height: 'auto', margin: '0 auto', overflow: 'visible',
-          touchAction: torch ? 'none' : 'auto' }}
-      >
-        <defs>
-          {/* Rough, powdery chalk: wobble the edge, then knock holes in it with noise */}
-          <filter id="chalk" x="-5%" y="-5%" width="110%" height="110%">
-            <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" seed="3" result="wobble" />
-            <feDisplacementMap in="SourceGraphic" in2="wobble" scale="2.2" result="rough" />
-            <feTurbulence type="fractalNoise" baseFrequency="1.4" numOctaves="1" seed="8" result="grain" />
-            <feColorMatrix in="grain" type="matrix"
-              values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -2.2 1.75" result="speckle" />
-            <feComposite in="rough" in2="speckle" operator="in" />
-          </filter>
-          {/* Blood: ragged splash edges plus a mottled, grainy surface */}
-          <filter id="splatter" x="-30%" y="-30%" width="160%" height="160%">
-            <feTurbulence type="fractalNoise" baseFrequency="0.09" numOctaves="3" seed="11" result="edge" />
-            <feDisplacementMap in="SourceGraphic" in2="edge" scale="10" result="ragged" />
-            <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="4" result="grain" />
-            <feColorMatrix in="grain" type="matrix"
-              values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -1.6 1.55" result="pores" />
-            <feComposite in="ragged" in2="pores" operator="in" />
-          </filter>
-          {/* Torch mode: the drawing is only visible inside a soft pool of light around the pointer.
-              Masking the drawing (rather than laying darkness over the page) leaves no visible edge */}
-          <radialGradient id="torch-beam">
-            <stop offset="0%" stopColor="#fff" />
-            <stop offset="55%" stopColor="#fff" />
-            <stop offset="100%" stopColor="#000" />
-          </radialGradient>
-          <mask id="torch-mask" maskUnits="userSpaceOnUse" x="-60" y="-20" width="530" height="440">
-            {light && <circle cx={light.x} cy={light.y} r={TORCH_RADIUS} fill="url(#torch-beam)" />}
-          </mask>
-        </defs>
-
-        {/* In torch mode everything below is masked to the pool of light */}
-        <g mask={torch ? 'url(#torch-mask)' : undefined}>
-          {/* Blood splattered from the head: a pool, runs down the ground, and flung droplets */}
-          <motion.g
-            filter="url(#splatter)"
-            style={{ opacity: bloodOpacity, scale: bloodScale, transformOrigin: '370px 84px' }}
+    // The drawing pins near the middle of the screen while the spacer below scrolls past,
+    // so the reader gets most of a screen's worth of scrolling to draw it (not just its own height)
+    <section ref={ref} style={{ marginTop: '33px', position: 'relative' }}>
+      <div style={{ position: 'sticky', top: 'max(16px, calc(50vh - 220px))', paddingBottom: '56px', paddingLeft: '16px', paddingRight: '16px' }}>
+        {/* Torch switch, on the right edge of the content column */}
+        <div className="max-w-4xl mx-auto flex justify-end" style={{ marginBottom: '8px' }}>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={torch}
+            onClick={() => { setTorch((t) => !t); setLight(null) }}
+            className="flex items-center"
+            style={{ gap: '10px', background: 'none', border: 'none', padding: '4px 0', cursor: 'pointer',
+              color: 'rgba(239,236,228,0.75)', fontSize: '0.8125rem', fontFamily: 'var(--font-dm-mono), monospace' }}
           >
-            <ellipse cx="368" cy="84" rx="24" ry="17" fill={BLOOD_DARK} />
-            <ellipse cx="364" cy="80" rx="15" ry="11" fill={BLOOD} />
-            <ellipse cx="386" cy="74" rx="9" ry="12" fill={BLOOD} />
-            {DROPS.map((d, i) => (
-              <circle key={i} cx={d.cx} cy={d.cy} r={d.r} fill={i % 3 ? BLOOD : BLOOD_DARK} />
+            Torch
+            <span aria-hidden="true" style={{ position: 'relative', width: '38px', height: '22px', borderRadius: '999px',
+              background: torch ? MARKER : 'rgba(239,236,228,0.18)', transition: 'background 0.2s' }}>
+              <motion.span
+                initial={false}
+                animate={{ x: torch ? 16 : 0 }}
+                transition={{ type: 'spring', stiffness: 600, damping: 32 }}
+                style={{ position: 'absolute', top: '3px', left: '3px', width: '16px', height: '16px', borderRadius: '50%',
+                  background: torch ? '#141414' : '#EFECE4' }}
+              />
+            </span>
+            <span style={{ minWidth: '1.8em', textAlign: 'left' }}>{torch ? 'On' : 'Off'}</span>
+          </button>
+        </div>
+
+        <svg
+          ref={svgRef}
+          onPointerDown={moveLight}
+          onPointerMove={moveLight}
+          onPointerLeave={() => setLight(null)}
+          viewBox="0 20 410 360"
+          role="img"
+          aria-label="A chalk outline of a body on the ground, with blood by the head and five evidence markers"
+          // 351px tall: 40px shorter than the first version of this drawing
+          // In torch mode a finger drags the light instead of scrolling the page
+          style={{ display: 'block', width: '100%', maxWidth: '400px', height: 'auto', margin: '0 auto', overflow: 'visible',
+            touchAction: torch ? 'none' : 'auto' }}
+        >
+          <defs>
+            {/* Rough, powdery chalk: wobble the edge, then knock holes in it with noise */}
+            <filter id="chalk" x="-5%" y="-5%" width="110%" height="110%">
+              <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" seed="3" result="wobble" />
+              <feDisplacementMap in="SourceGraphic" in2="wobble" scale="2.2" result="rough" />
+              <feTurbulence type="fractalNoise" baseFrequency="1.4" numOctaves="1" seed="8" result="grain" />
+              <feColorMatrix in="grain" type="matrix"
+                values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -2.2 1.75" result="speckle" />
+              <feComposite in="rough" in2="speckle" operator="in" />
+            </filter>
+            {/* Blood: ragged splash edges plus a mottled, grainy surface */}
+            <filter id="splatter" x="-30%" y="-30%" width="160%" height="160%">
+              <feTurbulence type="fractalNoise" baseFrequency="0.09" numOctaves="3" seed="11" result="edge" />
+              <feDisplacementMap in="SourceGraphic" in2="edge" scale="10" result="ragged" />
+              <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="4" result="grain" />
+              <feColorMatrix in="grain" type="matrix"
+                values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -1.6 1.55" result="pores" />
+              <feComposite in="ragged" in2="pores" operator="in" />
+            </filter>
+            {/* Torch mode: the drawing is only visible inside a soft pool of light around the pointer.
+                Masking the drawing (rather than laying darkness over the page) leaves no visible edge */}
+            <radialGradient id="torch-beam">
+              <stop offset="0%" stopColor="#fff" />
+              <stop offset="55%" stopColor="#fff" />
+              <stop offset="100%" stopColor="#000" />
+            </radialGradient>
+            <mask id="torch-mask" maskUnits="userSpaceOnUse" x="-60" y="-20" width="530" height="440">
+              {light && <circle cx={light.x} cy={light.y} r={TORCH_RADIUS} fill="url(#torch-beam)" />}
+            </mask>
+          </defs>
+
+          {/* In torch mode everything below is masked to the pool of light */}
+          <g mask={torch ? 'url(#torch-mask)' : undefined}>
+            {/* Blood splattered from the head: a pool, runs down the ground, and flung droplets */}
+            <motion.g
+              filter="url(#splatter)"
+              style={{ opacity: bloodOpacity, scale: bloodScale, transformOrigin: '370px 84px' }}
+            >
+              <ellipse cx="368" cy="84" rx="24" ry="17" fill={BLOOD_DARK} />
+              <ellipse cx="364" cy="80" rx="15" ry="11" fill={BLOOD} />
+              <ellipse cx="386" cy="74" rx="9" ry="12" fill={BLOOD} />
+              {DROPS.map((d, i) => (
+                <circle key={i} cx={d.cx} cy={d.cy} r={d.r} fill={i % 3 ? BLOOD : BLOOD_DARK} />
+              ))}
+            </motion.g>
+            {DRIPS.map(([x, len, w], i) => (
+              <Drip key={i} x={x} len={len} w={w} i={i} progress={progress} />
             ))}
-          </motion.g>
-          {DRIPS.map(([x, len, w], i) => (
-            <Drip key={i} x={x} len={len} w={w} i={i} progress={progress} />
-          ))}
 
-          <motion.path
-            d={BODY_PATH}
-            fill="none"
-            stroke={CHALK}
-            strokeWidth="2.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            filter="url(#chalk)"
-            style={{ pathLength: chalk }}
-          />
+            <motion.path
+              d={BODY_PATH}
+              fill="none"
+              stroke={CHALK}
+              strokeWidth="2.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              filter="url(#chalk)"
+              style={{ pathLength: chalk }}
+            />
 
-          {/* Evidence markers drop in once the outline is drawn */}
-          {MARKERS.map((m) => (
-            <Marker key={m.n} x={m.x} y={m.y} n={m.n} progress={progress} />
-          ))}
-        </g>
-      </svg>
+            {/* Evidence markers drop in once the outline is drawn */}
+            {MARKERS.map((m) => (
+              <Marker key={m.n} x={m.x} y={m.y} n={m.n} progress={progress} />
+            ))}
+          </g>
+        </svg>
+      </div>
+      <div aria-hidden="true" style={{ height: '90vh' }} />
     </section>
   )
 }
