@@ -5,8 +5,8 @@ import { motion, useInView } from 'framer-motion'
 
 // ── Closing image: a chalk outline of a body, drawn as the reader arrives ─────────────
 // The outline is traced from the reference drawing (400 × 400 frame). Once it has been
-// drawn, blood splatters out from the head. Five evidence markers sit hidden around the
-// body and appear when the reader hovers (or taps) their spot.
+// drawn, blood splatters out from the head and five evidence markers drop in around the
+// body; hovering (or tapping) one opens its note. An optional torch mode darkens the scene.
 
 const CHALK = '#EFECE4'
 const MARKER = '#FFBE2A'
@@ -25,14 +25,16 @@ const OUTLINE = [
 ]
 const BODY_PATH = `M${OUTLINE.map((p) => p.join(',')).join(' L')} Z`
 
-// Where each hidden marker lives: the hotspot the reader hovers, and where the tent stands
+// Where each marker stands (its hotspot sits on it),
+// and the evidence note it opens: a recap of a finding from earlier in the story
 const MARKERS = [
-  { n: 1, x: 300, y: 100 }, // beside the head
-  { n: 2, x: 112, y: 46 },  // by the raised hand
-  { n: 3, x: 380, y: 236 }, // by the lower hand
-  { n: 4, x: 6, y: 178 },   // by the bent leg's foot
-  { n: 5, x: 98, y: 332 },  // by the straight leg's foot
+  { n: 1, x: 300, y: 100, title: 'The victim', note: '78% of homicide victims are men.' }, // beside the head
+  { n: 2, x: 112, y: 46, title: 'The killer', note: 'Over half of all victims knew their killer.' }, // by the raised hand
+  { n: 3, x: 380, y: 236, title: 'Women', note: 'About 3 in 4 women who are killed knew their killer.' }, // by the lower hand
+  { n: 4, x: 6, y: 178, title: 'The motive', note: 'Arguments are the most common motive: 28 in every 100 killings.' }, // by the bent leg's foot
+  { n: 5, x: 98, y: 332, title: 'Justice', note: 'In the Americas, fewer than 2 in 10 killings end in a conviction.' }, // by the straight leg's foot
 ]
+const TORCH_RADIUS = 70
 
 const DRAW_SECONDS = 1.7 // 40% faster than the first version (2.8 s)
 
@@ -50,13 +52,13 @@ const DROPS = Array.from({ length: 26 }, (_, i) => {
 // Drips running down from the pool: x, length, width
 const DRIPS = [[352, 52, 3.2], [362, 88, 4], [374, 40, 2.6], [384, 66, 3.4], [394, 30, 2.2]]
 
-// A folded evidence tent with its number
-function Marker({ x, y, n, show }) {
+// A folded evidence tent with its number; it lifts a little while it is being examined
+function Marker({ x, y, n, show, lifted, delay }) {
   return (
     <motion.g
-      initial={false}
-      animate={show ? { opacity: 1, y: 0 } : { opacity: 0, y: -10 }}
-      transition={{ type: 'spring', stiffness: 520, damping: 20 }}
+      initial={{ opacity: 0, y: -10 }}
+      animate={show ? { opacity: 1, y: lifted ? -5 : 0 } : { opacity: 0, y: -10 }}
+      transition={{ type: 'spring', stiffness: 520, damping: 20, delay: show && !lifted ? delay : 0 }}
       style={{ pointerEvents: 'none' }}
     >
       <ellipse cx={x + 14} cy={y + 20} rx="17" ry="3.5" fill="rgba(0,0,0,0.6)" />
@@ -73,16 +75,37 @@ function Marker({ x, y, n, show }) {
 export default function MarqueeFooter() {
   const ref = useRef(null)
   const inView = useInView(ref, { once: false, margin: '-80px' })
-  const [hovered, setHovered] = useState(null)
+  const svgRef = useRef(null)
+  const [active, setActive] = useState(null)
+  const [torch, setTorch] = useState(false)
+  const [light, setLight] = useState(null) // torch position in drawing units, or null when the pointer is away
+  const note = MARKERS.find((m) => m.n === active)
+
+  // Pointer position on screen → drawing units, so the light follows the cursor (or finger)
+  const moveLight = (e) => {
+    const svg = svgRef.current
+    if (!torch || !svg) return
+    const pt = svg.createSVGPoint()
+    pt.x = e.clientX
+    pt.y = e.clientY
+    const p = pt.matrixTransform(svg.getScreenCTM().inverse())
+    setLight({ x: p.x, y: p.y })
+  }
 
   return (
     <footer ref={ref} style={{ marginTop: '33px', paddingBottom: '64px', paddingLeft: '16px', paddingRight: '16px' }}>
       <svg
+        ref={svgRef}
+        onPointerDown={moveLight}
+        onPointerMove={moveLight}
+        onPointerLeave={() => setLight(null)}
         viewBox="0 20 410 360"
-        role="img"
-        aria-label="A chalk outline of a body on the ground, with blood by the head and five hidden evidence markers"
+        role="group"
+        aria-label="A chalk outline of a body on the ground, with blood by the head and five evidence markers"
         // 351px tall: 40px shorter than the first version of this drawing
-        style={{ display: 'block', width: '100%', maxWidth: '400px', height: 'auto', margin: '0 auto', overflow: 'visible' }}
+        // In torch mode a finger drags the light instead of scrolling the page
+        style={{ display: 'block', width: '100%', maxWidth: '400px', height: 'auto', margin: '0 auto', overflow: 'visible',
+          touchAction: torch ? 'none' : 'auto' }}
       >
         <defs>
           {/* Rough, powdery chalk: wobble the edge, then knock holes in it with noise */}
@@ -103,6 +126,20 @@ export default function MarqueeFooter() {
               values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -1.6 1.55" result="pores" />
             <feComposite in="ragged" in2="pores" operator="in" />
           </filter>
+          {/* White = dark; the soft black spot under the pointer lets the drawing show through */}
+          <radialGradient id="torch-beam">
+            <stop offset="0%" stopColor="#000" />
+            <stop offset="55%" stopColor="#000" />
+            <stop offset="100%" stopColor="#fff" />
+          </radialGradient>
+          {/* The darkness fades out at its edges, so it never shows as a box on the page */}
+          <filter id="torch-edge" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="14" />
+          </filter>
+          <mask id="torch-mask" maskUnits="userSpaceOnUse" x="-80" y="-50" width="570" height="500">
+            <rect x="-40" y="-10" width="490" height="420" fill="#fff" filter="url(#torch-edge)" />
+            {light && <circle cx={light.x} cy={light.y} r={TORCH_RADIUS} fill="url(#torch-beam)" />}
+          </mask>
         </defs>
 
         {/* Blood splattered from the head: a pool, runs down the ground, and flung droplets */}
@@ -146,22 +183,67 @@ export default function MarqueeFooter() {
           transition={{ duration: inView ? DRAW_SECONDS : 0.4, ease: [0.45, 0, 0.25, 1] }}
         />
 
-        {/* Hidden evidence: each spot shows its numbered marker on hover or tap */}
+        {/* Evidence markers: they drop in once the outline is drawn; hover or tap one to read it */}
         {MARKERS.map((m) => (
-          <g key={m.n}>
-            <Marker x={m.x} y={m.y} n={m.n} show={inView && hovered === m.n} />
-            <circle
-              cx={m.x + 11} cy={m.y + 10} r="24"
-              fill="transparent"
-              style={{ cursor: 'pointer' }}
-              onMouseEnter={() => setHovered(m.n)}
-              onMouseLeave={() => setHovered(null)}
-              onClick={() => setHovered((h) => (h === m.n ? null : m.n))}
-              aria-label={`Evidence marker ${m.n}`}
-            />
-          </g>
+          <Marker key={m.n} x={m.x} y={m.y} n={m.n} show={inView} lifted={active === m.n}
+            delay={DRAW_SECONDS + 0.1 + m.n * 0.12} />
+        ))}
+
+        {/* Torch mode: darkness everywhere except a soft pool of light around the pointer */}
+        {torch && (
+          <rect x="-80" y="-50" width="570" height="500" fill="#000" mask="url(#torch-mask)" style={{ pointerEvents: 'none' }} />
+        )}
+
+        {/* Hotspots sit on top so they still respond in torch mode */}
+        {MARKERS.map((m) => (
+          <circle
+            key={m.n}
+            cx={m.x + 11} cy={m.y + 10} r="24"
+            fill="transparent"
+            tabIndex={0}
+            role="button"
+            aria-label={`Evidence ${m.n}: ${m.title}`}
+            style={{ cursor: 'pointer', outline: 'none' }}
+            onMouseEnter={() => setActive(m.n)}
+            onMouseLeave={() => setActive(null)}
+            onFocus={() => setActive(m.n)}
+            onBlur={() => setActive(null)}
+            onClick={() => setActive((a) => (a === m.n ? null : m.n))}
+          />
         ))}
       </svg>
+
+      {/* The evidence note for the marker being examined */}
+      <div aria-live="polite" style={{ maxWidth: '400px', margin: '14px auto 0', minHeight: '3.4em', textAlign: 'center' }}>
+        {note ? (
+          <motion.p key={note.n} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}
+            style={{ margin: 0, color: '#EFECE4', fontSize: '0.9375rem', lineHeight: 1.5 }}>
+            <span style={{ color: MARKER, fontWeight: 700, fontFamily: 'var(--font-dm-mono), monospace' }}>
+              Evidence {note.n} · {note.title}
+            </span>
+            <br />
+            {note.note}
+          </motion.p>
+        ) : (
+          <p style={{ margin: 0, color: 'rgba(239,236,228,0.5)', fontSize: '0.8125rem', lineHeight: 1.5,
+            fontFamily: 'var(--font-dm-mono), monospace', fontStyle: 'italic' }}>
+            {torch ? 'Move the torch over the scene to find the evidence' : 'Hover over or tap a marker to examine the evidence'}
+          </p>
+        )}
+      </div>
+
+      <div style={{ textAlign: 'center', marginTop: '10px' }}>
+        <button
+          type="button"
+          aria-pressed={torch}
+          onClick={() => setTorch((t) => !t)}
+          style={{ background: 'none', border: '1px solid rgba(239,236,228,0.3)', borderRadius: '999px',
+            padding: '6px 14px', color: 'rgba(239,236,228,0.8)', fontSize: '0.75rem', cursor: 'pointer',
+            fontFamily: 'var(--font-dm-mono), monospace' }}
+        >
+          {torch ? 'Turn the lights back on' : 'Turn off the lights and use a torch'}
+        </button>
+      </div>
     </footer>
   )
 }
