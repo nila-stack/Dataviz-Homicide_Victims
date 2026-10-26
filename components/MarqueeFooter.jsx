@@ -1,12 +1,13 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import { motion, useInView } from 'framer-motion'
+import { motion, useScroll, useTransform } from 'framer-motion'
 
-// ── Closing image: a chalk outline of a body, drawn as the reader arrives ─────────────
-// The outline is traced from the reference drawing (400 × 400 frame). Once it has been
-// drawn, blood splatters out from the head and five evidence markers drop in around the
-// body. A torch switch darkens the scene so the reader explores it with a pool of light.
+// ── Closing image: a chalk outline of a body, drawn as the reader scrolls ────────────
+// The outline is traced from the reference drawing (400 × 400 frame). Scrolling down draws it,
+// then blood splatters out from the head and five evidence markers drop in around the body;
+// scrolling back up erases it all in reverse. A torch switch darkens the scene so the reader
+// explores it with a pool of light.
 
 const CHALK = '#EFECE4'
 const MARKER = '#FFBE2A'
@@ -35,7 +36,11 @@ const MARKERS = [
 ]
 const TORCH_RADIUS = 70
 
-const DRAW_SECONDS = 1.7 // 40% faster than the first version (2.8 s)
+// Everything follows the reader's scroll through this section (0 → 1), and runs backwards on the way up:
+const CHALK_END = 0.7            // the outline is traced over the first 70%
+const BLOOD_RANGE = [0.6, 0.75]  // the pool spreads as the outline closes
+const DRIP_START = 0.68          // then the runs trickle down
+const markerRange = (n) => [0.7 + n * 0.045, 0.76 + n * 0.045] // markers 1–5 drop in one by one, ending at 98.5%
 
 // Fixed pseudo-random droplets around the head (deterministic, so server and client match)
 const DROPS = Array.from({ length: 26 }, (_, i) => {
@@ -51,15 +56,28 @@ const DROPS = Array.from({ length: 26 }, (_, i) => {
 // Drips running down from the pool: x, length, width
 const DRIPS = [[352, 52, 3.2], [362, 88, 4], [374, 40, 2.6], [384, 66, 3.4], [394, 30, 2.2]]
 
-// A folded evidence tent with its number
-function Marker({ x, y, n, show, delay }) {
+// One run of blood, growing downwards from the pool as the reader scrolls
+function Drip({ x, len, w, i, progress }) {
+  const range = [DRIP_START, DRIP_START + 0.1 + i * 0.03]
+  const scaleY = useTransform(progress, range, [0, 1])
+  const opacity = useTransform(progress, range, [0, 0.9])
   return (
-    <motion.g
-      initial={{ opacity: 0, y: -10 }}
-      animate={show ? { opacity: 1, y: 0 } : { opacity: 0, y: -10 }}
-      transition={{ type: 'spring', stiffness: 520, damping: 20, delay: show ? delay : 0 }}
-      style={{ pointerEvents: 'none' }}
-    >
+    <motion.rect
+      x={x - w / 2} y={88} width={w} height={len} rx={w / 2}
+      fill={i % 2 ? BLOOD_DARK : BLOOD}
+      filter="url(#splatter)"
+      style={{ scaleY, opacity, transformOrigin: `${x}px 88px` }}
+    />
+  )
+}
+
+// A folded evidence tent with its number; it drops into place at its point in the scroll
+function Marker({ x, y, n, progress }) {
+  const range = markerRange(n)
+  const opacity = useTransform(progress, range, [0, 1])
+  const dropY = useTransform(progress, range, [-10, 0])
+  return (
+    <motion.g style={{ opacity, y: dropY, pointerEvents: 'none' }}>
       <ellipse cx={x + 14} cy={y + 20} rx="17" ry="3.5" fill="rgba(0,0,0,0.6)" />
       <path d={`M${x},${y + 20} L${x + 4},${y} L${x + 18},${y} L${x + 22},${y + 20} Z`} fill={MARKER} />
       <path d={`M${x + 18},${y} L${x + 22},${y + 20} L${x + 26},${y + 18} Z`} fill="#C9921A" />
@@ -73,7 +91,11 @@ function Marker({ x, y, n, show, delay }) {
 
 export default function MarqueeFooter() {
   const ref = useRef(null)
-  const inView = useInView(ref, { once: false, margin: '-80px' })
+  // 0 when the section's top is 90% down the screen, 1 when its bottom reaches the bottom of the screen
+  const { scrollYProgress: progress } = useScroll({ target: ref, offset: ['start 0.9', 'end end'] })
+  const chalk = useTransform(progress, [0, CHALK_END], [0, 1])
+  const bloodOpacity = useTransform(progress, BLOOD_RANGE, [0, 0.95])
+  const bloodScale = useTransform(progress, BLOOD_RANGE, [0.4, 1])
   const svgRef = useRef(null)
   const [torch, setTorch] = useState(false)
   const [light, setLight] = useState(null) // torch position in drawing units, or null when the pointer is away
@@ -166,10 +188,7 @@ export default function MarqueeFooter() {
           {/* Blood splattered from the head: a pool, runs down the ground, and flung droplets */}
           <motion.g
             filter="url(#splatter)"
-            initial={{ opacity: 0, scale: 0.4 }}
-            animate={inView ? { opacity: 0.95, scale: 1 } : { opacity: 0, scale: 0.4 }}
-            transition={{ duration: 0.5, ease: [0.2, 0.9, 0.3, 1], delay: inView ? DRAW_SECONDS * 0.8 : 0 }}
-            style={{ transformOrigin: '370px 84px' }}
+            style={{ opacity: bloodOpacity, scale: bloodScale, transformOrigin: '370px 84px' }}
           >
             <ellipse cx="368" cy="84" rx="24" ry="17" fill={BLOOD_DARK} />
             <ellipse cx="364" cy="80" rx="15" ry="11" fill={BLOOD} />
@@ -179,16 +198,7 @@ export default function MarqueeFooter() {
             ))}
           </motion.g>
           {DRIPS.map(([x, len, w], i) => (
-            <motion.rect
-              key={i}
-              x={x - w / 2} y={88} width={w} height={len} rx={w / 2}
-              fill={i % 2 ? BLOOD_DARK : BLOOD}
-              filter="url(#splatter)"
-              initial={{ scaleY: 0, opacity: 0 }}
-              animate={inView ? { scaleY: 1, opacity: 0.9 } : { scaleY: 0, opacity: 0 }}
-              transition={{ duration: 0.9 + i * 0.12, ease: 'easeIn', delay: inView ? DRAW_SECONDS * 0.8 + 0.3 : 0 }}
-              style={{ transformOrigin: `${x}px 88px` }}
-            />
+            <Drip key={i} x={x} len={len} w={w} i={i} progress={progress} />
           ))}
 
           <motion.path
@@ -199,14 +209,12 @@ export default function MarqueeFooter() {
             strokeLinecap="round"
             strokeLinejoin="round"
             filter="url(#chalk)"
-            initial={{ pathLength: 0 }}
-            animate={{ pathLength: inView ? 1 : 0 }}
-            transition={{ duration: inView ? DRAW_SECONDS : 0.4, ease: [0.45, 0, 0.25, 1] }}
+            style={{ pathLength: chalk }}
           />
 
           {/* Evidence markers drop in once the outline is drawn */}
           {MARKERS.map((m) => (
-            <Marker key={m.n} x={m.x} y={m.y} n={m.n} show={inView} delay={DRAW_SECONDS + 0.1 + m.n * 0.12} />
+            <Marker key={m.n} x={m.x} y={m.y} n={m.n} progress={progress} />
           ))}
         </g>
       </svg>
