@@ -1,5 +1,8 @@
 // ── Sources ─────────────────────────────────────────────────────────────────────
 
+// One grey for every line: links, what each was used for, and the closing note
+const GREY = 'rgba(239,236,228,0.5)'
+
 const SOURCES = [
   {
     name: 'UNODC, Global Study on Homicide 2023',
@@ -44,16 +47,16 @@ export default function SourcesSection() {
         </h2>
         <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '5px' }}>
           {SOURCES.map((s) => (
-            <li key={s.name} style={{ fontSize: '0.8125rem', lineHeight: 1.45, color: 'rgba(239,236,228,0.7)' }}>
+            <li key={s.name} style={{ fontSize: '0.8125rem', lineHeight: 1.45, color: GREY }}>
               <a href={s.url} target="_blank" rel="noopener noreferrer"
-                style={{ color: '#EFECE4', textDecoration: 'underline', textUnderlineOffset: '3px' }}>
+                style={{ color: GREY, textDecoration: 'underline', textUnderlineOffset: '3px' }}>
                 {s.name}
               </a>
-              <span style={{ color: 'rgba(239,236,228,0.5)' }}> · {s.used}</span>
+              <span> · {s.used}</span>
             </li>
           ))}
         </ul>
-        <p style={{ marginTop: '12px', fontSize: '0.75rem', lineHeight: 1.6, color: 'rgba(239,236,228,0.45)', maxWidth: '760px' }}>
+        <p style={{ marginTop: '12px', fontSize: '0.75rem', lineHeight: 1.6, color: GREY, maxWidth: '760px' }}>
           Figures come from different years (2021 to 2023) and from countries that report data, so global and
           regional numbers are estimates.
         </p>
