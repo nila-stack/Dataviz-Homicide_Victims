@@ -28,8 +28,8 @@ export default function HomePage() {
       <IndiaSection />
       <LiveCounter />
       <ResearchSnippets />
-      <SourcesSection />
       <MarqueeFooter />
+      <SourcesSection />
     </main>
   )
 }
